@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://pythonidaer.github.io/technical-writing/sitemap.xml

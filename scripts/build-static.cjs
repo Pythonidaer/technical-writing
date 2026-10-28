@@ -1,0 +1,26 @@
+// Preserve useful reading content when scripts are disabled or unavailable.
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const dist = path.join(__dirname, '..', 'dist');
+const context = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(dist, 'lessons.js'), 'utf8') + '\nglobalThis.lessonData = lessons;', context);
+vm.runInContext(fs.readFileSync(path.join(dist, 'resources.js'), 'utf8') + '\nglobalThis.resourceData = resources;', context);
+const {lessonData: lessons, resourceData: resources} = context;
+const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const read = file => fs.readFileSync(path.join(dist, file), 'utf8');
+const write = (file, value) => fs.writeFileSync(path.join(dist, file), value);
+let index = read('index.html');
+index = index.replace(/(<ol class="lesson-list" id="lesson-list">)[\s\S]*?(<\/ol>)/, '$1' + lessons.map((l,i)=>`<li><a href="#lesson-${l.slug}" data-slug="${l.slug}"><span>${i+1}</span><span>${esc(l.title)}</span></a></li>`).join('')+'$2');
+const first = lessons[0];
+index = index.replace(/(<article class="course-content" id="lesson-content" aria-labelledby="lesson-title">)[\s\S]*?(<\/article>)/, '$1'+`<div class="lesson-meta mono">Foundations / Lesson 1</div><h2 id="lesson-title">${esc(first.title)}</h2><p class="lesson-intro">${esc(first.intro)}</p><div class="lesson-body">${first.body}</div><p><a href="full-guide.html">Read every lesson and practice exercise in the full text guide.</a></p>`+'$2');
+write('index.html',index);
+let reading = read('design-reading.html');
+const resourceHTML = resources.map(r=>`<li class="resource-item" id="resource-${r.id}"><span class="num">${r.id}</span><div><h2><a href="${esc(r.url)}">${esc(r.title)}</a></h2><p>${esc(r.note)}</p><a class="resource-url" href="${esc(r.url)}">${esc(r.url)}</a></div><div class="resource-meta"><span class="kind">${esc(r.kind)}</span><div>${esc(r.publisher)}</div><div>${esc(r.topics.join(' / '))}</div></div></li>`).join('');
+reading = reading.replace(/(<ol class="resource-list" id="resource-list">)[\s\S]*?(<\/ol>)/, '$1'+resourceHTML+'$2');
+write('design-reading.html',reading);
+let head = index.slice(0,index.indexOf('</head>')+7).replace('<title>Technical Writing — A Practical Field Guide</title>','<title>Technical Writing — Full Text Guide</title>').replaceAll('https://pythonidaer.github.io/technical-writing/"','https://pythonidaer.github.io/technical-writing/full-guide.html"').replace(/<script src="(?:lessons|app)\.js" defer><\/script>/g,'');
+let header=index.match(/<header[\s\S]*?<\/header>/)[0].replace('href="#lessons"','href="index.html#lessons"').replace('href="#review"','href="index.html#review"').replace('href="#sources"','href="index.html#sources"');
+const chapters = lessons.map((l,i)=>`<article id="${l.slug}" aria-labelledby="title-${l.slug}"><span class="label">Lesson ${i+1} / ${esc(l.group)}</span><h2 id="title-${l.slug}">${esc(l.title)}</h2><p class="lesson-intro">${esc(l.intro)}</p><div class="lesson-body">${l.body}</div><h3>Practice</h3><p>${esc(l.practice)}</p><details><summary>Show a sample answer</summary><p>${esc(l.answer)}</p></details><div class="lesson-takeaway"><span class="label">Keep this rule</span><p>${esc(l.takeaway)}</p></div></article>`).join('');
+write('full-guide.html',head+'<body><a class="skip" href="#main">Skip to content</a>'+header+'<main class="full-guide wrap" id="main"><h1>Technical writing.<br>Full text guide.</h1><p>All 10 lessons, examples, and practice exercises. This version works without JavaScript and can be printed.</p><ol>'+lessons.map(l=>`<li><a href="#${l.slug}">${esc(l.title)}</a></li>`).join('')+'</ol>'+chapters+'<p>Adapted from the supplied course transcript with original illustrative examples. <a href="index.html#sources">Read the source context and clarifications.</a></p></main><footer class="wrap site-footer"><a href="index.html">Interactive guide</a><a href="#main">Back to top</a></footer><script src="app.js" defer></script></body></html>');
+console.log(`Rendered ${lessons.length} lessons and ${resources.length} resources as static HTML.`);
